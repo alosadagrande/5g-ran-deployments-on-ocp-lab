@@ -43,8 +43,10 @@ disconnected_extra_images:
 - quay.io/rhsysdeseng/5granlab-ee:lab
 disconnected_extra_release: 4.18.0-rc.4
 disk_size: 120
-extra_disks: [200]
-memory: 48000
+#extra_disks: [200]
+extra_disks: [120]
+#memory: 48000
+memory: 24000
 numcpus: 16
 ctlplanes: 3
 workers: 0

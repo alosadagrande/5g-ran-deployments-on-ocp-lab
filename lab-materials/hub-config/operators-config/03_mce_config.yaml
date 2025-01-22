@@ -7,4 +7,11 @@ metadata:
 spec:
   availabilityConfig: Basic
   targetNamespace: multicluster-engine
-
+  overrides:
+    components:
+    - name: image-based-install-operator
+      enabled: true
+    - name: hypershift
+      enabled: false
+    - name: hypershift-local-hosting
+      enabled: false

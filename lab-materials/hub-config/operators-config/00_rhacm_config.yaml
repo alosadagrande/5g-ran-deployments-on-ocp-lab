@@ -10,3 +10,8 @@ metadata:
 spec: 
   availabilityConfig: Basic
   enableClusterBackup: false
+  overrides:
+    components:
+    - name: siteconfig
+      enabled: true
+
