@@ -31,6 +31,15 @@ metadata:
   name: hub-operators-config
   namespace: openshift-gitops
 spec:
+  ignoreDifferences:
+  - group: multicluster.openshift.io
+    jsonPointers:
+    - /spec/overrides/components
+    kind: MultiClusterEngine
+  - group: operator.open-cluster-management.io
+    jsonPointers:
+    - /spec/overrides/components
+    kind: MultiClusterHub
   destination:
     name: ''
     namespace: ''
