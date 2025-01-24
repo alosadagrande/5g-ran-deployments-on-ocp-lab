@@ -80,7 +80,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/openshift4"
+      location = "infra.5g-deployment.lab:8443/prega/test/openshift4"
 
     [[registry]]
     prefix = ""
@@ -88,7 +88,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/rhacm2"
+      location = "infra.5g-deployment.lab:8443/prega/test/rhacm2"
 
     [[registry]]
     prefix = ""
@@ -96,7 +96,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/rhceph"
+      location = "infra.5g-deployment.lab:8443/prega/test/rhceph"
 
     [[registry]]
     prefix = ""
@@ -104,7 +104,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/rhel8"
+      location = "infra.5g-deployment.lab:8443/prega/test/rhel8"
 
     [[registry]]
     prefix = ""
@@ -112,7 +112,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/rh-sso-7"
+      location = "infra.5g-deployment.lab:8443/prega/test/rh-sso-7"
 
     [[registry]]
     prefix = ""
@@ -120,7 +120,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/odf4"
+      location = "infra.5g-deployment.lab:8443/prega/test/odf4"
 
     [[registry]]
     prefix = ""
@@ -128,7 +128,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/multicluster-engine"
+      location = "infra.5g-deployment.lab:8443/prega/test/multicluster-engine"
 
     [[registry]]
     prefix = ""
@@ -136,7 +136,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/openshift-gitops-1"
+      location = "infra.5g-deployment.lab:8443/prega/test/openshift-gitops-1"
 
     [[registry]]
     prefix = ""
@@ -144,7 +144,15 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/lvms4"
+      location = "infra.5g-deployment.lab:8443/prega/test/lvms4"
+
+    [[registry]]
+    prefix = ""
+    location = "quay.io/prega/test/rh-osbs"
+    mirror-by-digest-only = true
+
+    [[registry.mirror]]
+      location = "infra.5g-deployment.lab:8443/prega/test/rh-osbs"
 
     [[registry]]
     prefix = ""
