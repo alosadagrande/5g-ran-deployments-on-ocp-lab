@@ -152,7 +152,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/openshift/release"
+      location = "infra.5g-deployment.lab:8443/openshift-release-dev/ocp-v4.0-art-dev"
 
     [[registry]]
     prefix = ""
@@ -160,7 +160,7 @@ data:
     mirror-by-digest-only = true
 
     [[registry.mirror]]
-      location = "infra.5g-deployment.lab:8443/openshift/release-images"
+      location = "infra.5g-deployment.lab:8443/openshift-release-dev/ocp-release"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -214,7 +214,7 @@ metadata:
         argocd.argoproj.io/sync-wave: "4"
   name: openshift-v4.18.0-rc.5-disconnected
 spec:
-  releaseImage: infra.5g-deployment.lab:8443/openshift/release-images:4.18.0-rc.5-x86_64
+  releaseImage: infra.5g-deployment.lab:8443/openshift-release-dev/ocp-release:4.18.0-rc.5-x86_64
 ---
 apiVersion: hive.openshift.io/v1
 kind: ClusterImageSet
@@ -223,4 +223,4 @@ metadata:
         argocd.argoproj.io/sync-wave: "4"
   name: openshift-v4.18.0-rc.4-disconnected
 spec:
-  releaseImage: infra.5g-deployment.lab:8443/openshift/release-images:4.18.0-rc.4-x86_64
+  releaseImage: infra.5g-deployment.lab:8443/openshift-release-dev/ocp-release:4.18.0-rc.4-x86_64
