@@ -25,6 +25,6 @@ spec:
   channel: "stable"
   name: lifecycle-agent
   #  source: cs-redhat-operator-index
-  source: cs-prega-operator-index-v4-18-0-rc-5
+  source: cs-prega-operator-index-v4-18-0-rc-6
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic

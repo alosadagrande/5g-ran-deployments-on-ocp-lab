@@ -55,10 +55,10 @@ data:
     apiVersion: operators.coreos.com/v1alpha1
     kind: CatalogSource
     metadata:
-      name: cs-prega-operator-index-v4-18-0-rc-5
+      name: cs-prega-operator-index-v4-18-0-rc-6
       namespace: openshift-marketplace
     spec:
-      image: infra.5g-deployment.lab:8443/prega/prega-operator-index:v4.18.0-rc.5
+      image: infra.5g-deployment.lab:8443/prega/prega-operator-index:v4.18.0-rc.6
       sourceType: grpc
   enable-crun-master.yaml: |
     apiVersion: machineconfiguration.openshift.io/v1
