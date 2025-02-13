@@ -4,9 +4,14 @@ kind: MultiClusterHub
 metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
-    installer.open-cluster-management.io/mce-subscription-spec: '{"source": "cs-redhat-operator-index"}'
+    installer.open-cluster-management.io/mce-subscription-spec: '{"source": "cs-prega-operator-index-v4-18"}'
   name: multiclusterhub
   namespace: open-cluster-management
 spec: 
   availabilityConfig: Basic
   enableClusterBackup: false
+  overrides:
+    components:
+    - name: siteconfig
+      enabled: true
+
