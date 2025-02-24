@@ -137,7 +137,8 @@
 ** xref:lab-environment-introduction.adoc#git-server[Git Server]
 ** xref:lab-environment-introduction.adoc#container-registry[Container Registry]
 ** xref:lab-environment-introduction.adoc#openshift-hub-cluster[OpenShift Hub Cluster]
-** xref:lab-environment-introduction.adoc#automation-controller[AAP Automation Controller]
+** xref:lab-environment-introduction.adoc#s3-storage[S3 Storage Server]
+** xref:lab-environment-introduction.adoc#openshift-seed-sno[OpenShift Seed SNO Cluster]
 
 * xref:crafting-deployments-iac.adoc[Crafting Deployment's IaC] 
 ** xref:crafting-deployments-iac.adoc#introduction-to-clusterinstance[Introduction to the ClusterInstance]

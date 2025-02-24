@@ -38,12 +38,19 @@ Credentials for the OCP cluster:
 * Username: `admin` 
 * Password: The password is randomly generated for each environment, and can be found in the following path: `/root/cred-admin.txt` in your hypervisor host or in the e-mail you received when the lab was ready.
 
-[#automation-controller]
-== AAP Automation Controller
+[#s3-storage]
+== S3 Storage Server
 
-The Automation Controller can be reached at https://automation-aap.apps.hub.5g-deployment.lab
- 
-Credentials for Automation Controller:
- 
-* Username: `student`
-* Password: The password is randomly generated for each environment, and can be found in the following path: `/root/cred-dev.txt` in your hypervisor host or in the e-mail you received when the lab was ready.
+An S3 storage server is running on the infrastructure host in order to provide s3 backup and restore capabilities for the image-based upgrade process. You can access the management console at http://infra.5g-deployment.lab:9001/login. 
+
+* Username: `admin` 
+* Password: `admin1234`
+
+[#openshift-seed-sno]
+== OpenShift Seed SNO Cluster
+
+A Single Node OpenShift cluster is running on the infrastructure host running version {sno-seed-version} of OpenShift Container Platform. Its main purpose is act as a dedicated single-node OpenShift cluster that you use to create a seed image and is deployed with the target OpenShift Container Platform version. It aligns with the {seed-guidelines}[seed cluster guidelines] and includes the {seed-prereq-software}[software prerequisites] for an image-based installation and deployment and the {seed-prereq-config}[RAN DU profile for a seed image].
+
+Credentials for the seed SNO cluster:
+
+* Admin kubeconfig: It can be found either in the following path of the infrastructure host: /root/sno1kubeconfig or it can be downloaded from the RHACM Web Console.
