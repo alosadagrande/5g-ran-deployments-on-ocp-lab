@@ -22,7 +22,18 @@ Once the preinstallation is finished, the sno3 will be shutdown. At this point, 
 * The configuration ISO is mounted in the sno3 and the host is booted.
 * The Lifecycle-Agent Operator that was included in the seed image and so it is available in the sno3, detects the configuration ISO and starts the reconfiguration process until the OpenShift Cluster is completely deployed.
 
-[#creating-the-configurinstallationation-iso]
+[#baremetal-node-details]
+== Bare Metal Node Details
+
+The details for our baremetal node that we want to provision as SNO3 are the ones below:
+
+* RedFish Endpoint: `redfish-virtualmedia://192.168.125.1:9000/redfish/v1/Systems/local/sno3`
+* MAC Address: `aa:aa:aa:aa:04:01`
+* Primary disk: `/dev/vda`
+* BMC User: `admin`
+* BMC Password: `admin`
+
+[#creating-the-installation-iso]
 == Creating the Installation ISO
 
 In order to create the installation ISO we are going to create a working directory in the infrastructure node.
@@ -208,7 +219,7 @@ Feb 04 10:37:52 ocp-sno3 systemd[1]: Starting SNO Image-based Installation...
 Feb 04 10:37:52 ocp-sno3 systemd[1]: iscsi.service: Unit cannot be reloaded because it is inactive.
 Feb 04 10:37:53 ocp-sno3 systemd[1]: var-lib-containers-storage-overlay-opaque\x2dbug\x2dcheck2861559422-merged.mount: Deactivated successfully.
 Feb 04 10:37:53 ocp-sno3 podman[1625]: 2025-02-04 10:37:53.120804852 +0000 UTC m=+0.201463935 system refresh
-Feb 04 10:37:53 ocp-sno3 install-rhcos-and-restore-seed.sh[1625]: Trying to pull infra.5g-deployment.lab:8443/ibi/lab5gran:v4.18.0-rc.6...
+Feb 04 10:37:53 ocp-sno3 install-rhcos-and-restore-seed.sh[1625]: Trying to pull infra.5g-deployment.lab:8443/ibi/lab5gran:v4.18.0-rc.7...
 Feb 04 10:37:53 ocp-sno3 install-rhcos-and-restore-seed.sh[1625]: Getting image source signatures
 Feb 04 10:37:53 ocp-sno3 install-rhcos-and-restore-seed.sh[1625]: Copying blob sha256:93570925bc4c04f7a453bd0eb530ddad84ea634c54defef1ec2a6410ad1eb683
 ...
@@ -270,14 +281,12 @@ Once we verified the operator is running in our hub cluster we can start creatin
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/imagebaseinstall/01_ibi_ns.yaml
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno3/ns.yaml
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: "sno3"
-  labels:
-    name: "sno3"
+  name: sno3
 EOF
 -----
 
@@ -286,16 +295,16 @@ Next, the authentication credentials will be needed to pull the seed container i
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/imagebaseinstall/02_ibi_secret_registry.yaml
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno3/pull-secret.yaml
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ibi-image-pull-secret
+  name: disconnected-registry-pull-secret
   namespace: sno3
 stringData:
   .dockerconfigjson: '{"auths":{"infra.5g-deployment.lab:8443":{"auth":"YWRtaW46cjNkaDR0MSE="}}}'
-type: kubernetes.io/dockerconfigjson
+  type: kubernetes.io/dockerconfigjson
 EOF
 -----
 
@@ -304,50 +313,17 @@ The credentials to access the BMC are required in order to mount the configurati
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/imagebaseinstall/03_ibi_bmh.yaml
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno3/bmc-credentials.yaml
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: sno3-bmh-secret
+  name: sno3-bmc-credentials
   namespace: sno3
 data:
   username: "YWRtaW4="
   password: "YWRtaW4="
 type: Opaque
----
-apiVersion: metal3.io/v1alpha1
-kind: BareMetalHost
-metadata:
-  name: "ocp-sno3"
-  namespace: sno3
-spec:
-  bootMode: UEFI
-  bmc:
-    address: "redfish-virtualmedia://192.168.125.1:9000/redfish/v1/Systems/local/sno3"
-    disableCertificateVerification: true
-    credentialsName: "sno3-bmh-secret"
-  bootMACAddress: "aa:aa:aa:aa:04:01"
-  automatedCleaningMode: "disabled"
-  online: true
-  externallyProvisioned: true
-EOF
------
-
-Then, specify the version of the OpenShift release we want to install into the target cluster. This version actually matches with the OCP version found in the seed container image.
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/imagebaseinstall/04_ibi_cluster_image_set.yaml
----
-apiVersion: hive.openshift.io/v1
-kind: ClusterImageSet
-metadata:
-  annotations:
-  name: openshift-{sno-seed-version}-disconnected
-spec:
-  releaseImage: infra.5g-deployment.lab:8443/openshift-release-dev/ocp-release:{sno-cluster-version1-cvo}-x86_64
 EOF
 -----
 
@@ -355,13 +331,15 @@ Next, we have to create a `configMap` resource to define additional manifests in
 
 * The disconnected catalog source that we will allow us to install additional operators in the target SNO cluster.
 * The LVMCluster configuration for the LVM Operator. Note that the LVM Operator was included in the seed image.
+* The ImageDigestMirrorSet required in our disconnected environment.
 
 IMPORTANT: Remember that during the seed image generation, the catalogsources are removed from the seed image. Also, the LVMCluster CR is not allowed to exist in the seed cluster, it has to be added within the reconfiguration process. More information on the prerequisites for generating a seed image {seed-prereq-config}[here].
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/imagebaseinstall/05_ibi_extra_manifests.yaml
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno3/ibi_extra_manifests.yaml
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -378,7 +356,7 @@ data:
       namespace: openshift-marketplace
     spec:
       displayName: default-cat-source
-      image: infra.5g-deployment.lab:8443/prega/prega-operator-index:{openshift-release}
+      image: infra.5g-deployment.lab:8443/prega/prega-operator-index:v4.18
       publisher: Red Hat
       sourceType: grpc
       updateStrategy:
@@ -404,205 +382,216 @@ data:
             name: thin-pool-1
             overprovisionRatio: 10
             sizePercent: 90
-
+  ImageDigestSources.yaml: |
+    apiVersion: config.openshift.io/v1
+    kind: ImageDigestMirrorSet
+    metadata:
+      name: image-digest-mirror
+    spec:
+      imageDigestMirrors:
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/openshift4
+        source: registry.redhat.io/openshift4
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/rhacm2
+        source: registry.redhat.io/rhacm2
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/rhceph
+        source: registry.redhat.io/rhceph
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/rhel8
+        source: registry.redhat.io/rhel8
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/rh-sso-7
+        source: registry.redhat.io/rh-sso-7
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/odf4
+        source: registry.redhat.io/odf4
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/multicluster-engine
+        source: registry.redhat.io/multicluster-engine
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/openshift-gitops-1
+        source: registry.redhat.io/openshift-gitops-1
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/lvms4
+        source: registry.redhat.io/lvms4
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/rh-osbs
+        source: quay.io/prega/test/rh-osbs
+      - mirrors:
+        - infra.5g-deployment.lab:8443/prega/test/oadp
+        source: registry.redhat.io/oadp
+      - mirrors:
+        - infra.5g-deployment.lab:8443/openshift-release-dev/ocp-v4.0-art-dev
+        source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+      - mirrors:
+        - infra.5g-deployment.lab:8443/openshift-release-dev/ocp-release
+        source: quay.io/openshift-release-dev/ocp-release
+    status: {}
 EOF
 -----
 
-Now, create the specific `ImageClusterInstall` CR for the image-based installation process. It includes the previously created image object and the additional manifests configMap.
+Finally, add the Kustomization files so the previous manifests can be applied using a ZTP GitOps worflow.
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/imagebaseinstall/06_ibi_image_cluster_install.yaml
----
-apiVersion: extensions.hive.openshift.io/v1alpha1
-kind: ImageClusterInstall
-metadata:
-  name: "sno3"
-  namespace: "sno3"
-spec:
-  extraManifestsRefs:
-    - name: disconnected-ran-config
-  clusterDeploymentRef:
-    name: "sno3"
-  imageSetRef:
-    name: "openshift-{sno-cluster-version1}-disconnected"
-  hostname: "ocp-sno3.sno3.5g-deployment.lab"
-  networkConfigRef:
-    name: "ocp-sno3"
-  bareMetalHostRef:
-    name: "ocp-sno3"
-    namespace: "sno3"
-  machineNetwork: 192.168.125.0/24
-  imageDigestSources:
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/multicluster-engine
-    source: registry.redhat.io/multicluster-engine
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/openshift-gitops-1
-    source: registry.redhat.io/openshift-gitops-1
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/rh-sso-7
-    source: registry.redhat.io/rh-sso-7
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/lvms4
-    source: registry.redhat.io/lvms4
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/openshift4
-    source: registry.redhat.io/openshift4
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/rhacm2
-    source: registry.redhat.io/rhacm2
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/rhel8
-    source: registry.redhat.io/rhel8
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/rh-osbs
-    source: quay.io/prega/test/rh-osbs
-  - mirrors:
-    - infra.5g-deployment.lab:8443/prega/test/oadp
-    source: registry.redhat.io/oadp
-  - mirrors:
-    - infra.5g-deployment.lab:8443/openshift-release-dev/ocp-v4.0-art-dev
-    - infra.5g-deployment.lab:8443/openshift/release
-    source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
-  - mirrors:
-    - infra.5g-deployment.lab:8443/openshift-release-dev
-    source: quay.io/openshift-release-dev
-  - mirrors:
-    - infra.5g-deployment.lab:8443/openshift/release-images
-    source: quay.io/openshift-release-dev/ocp-release
-  sshKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC5pFKFLOuxrd9Q/TRu9sRtwGg2PV+kl2MHzBIGUhCcR0LuBJk62XG9tQWPQYTQ3ZUBKb6pRTqPXg+cDu5FmcpTwAKzqgUb6ArnjECxLJzJvWieBJ7k45QzhlZPeiN2Omik5bo7uM/P1YIo5pTUdVk5wJjaMOb7Xkcmbjc7r22xY54cce2Wb7B1QDtLWJkq++eJHSX2GlEjfxSlEvQzTN7m2N5pmoZtaXpLKcbOqtuSQSVKC4XPgb57hgEs/ZZy/LbGGHZyLAW5Tqfk1JCTFGm6Q+oOd3wAOF1SdUxM7frdrN3UOB12u/E6YuAx3fDvoNZvcrCYEpjkfrsjU91oz78aETZV43hOK9NWCOhdX5djA7G35/EMn1ifanVoHG34GwNuzMdkb7KdYQUztvsXIC792E2XzWfginFZha6kORngokZ2DwrzFj3wgvmVyNXyEOqhwi6LmlsYdKxEvUtiYhdISvh2Y9GPrFcJ5DanXe7NVAKXe5CyERjBnxWktqAPBzXJa36FKIlkeVF5G+NWgufC6ZWkDCD98VZDiPP9sSgqZF8bSR4l4/vxxAW4knKIZv11VX77Sa1qZOR9Ml12t5pNGT7wDlSOiDqr5EWsEexga/2s/t9itvfzhcWKt+k66jd8tdws2dw6+8JYJeiBbU63HBjxCX+vCVZASrNBjiXhFw=="
-EOF
------
-
-Then, create the `ClusterDeployment` object:
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/imagebaseinstall/07_ibi_cluster_deployment.yaml
----
-apiVersion: hive.openshift.io/v1
-kind: ClusterDeployment
-metadata:
-  name: "sno3"
-  namespace: "sno3"
-spec:
-  baseDomain: "5g-deployment.lab"
-  clusterInstallRef:
-    group: extensions.hive.openshift.io
-    kind: ImageClusterInstall
-    name: "sno3"
-    version: v1alpha1
-  clusterName: "sno3"
-  platform:
-    none: {}
-  pullSecretRef:
-    name: "ibi-image-pull-secret"
-EOF
------
-
-Add the `ManagedCluster` object, so the target cluster is automatically attached to the hub cluster after the installation is completed:
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/imagebaseinstall/08_ibi_managedcluster.yaml
----
-apiVersion: cluster.open-cluster-management.io/v1
-kind: ManagedCluster
-metadata:
-  name: sno3
-  labels:
-    common: "ocp418"
-    logicalGroup: "active"
-    group-du-sno: ""
-    hardware-type: "hw-type-platform-1"
-spec:
-  hubAcceptsClient: true
-EOF
------
-
-The `KlusterletAddonConfig` CR must be included too, so the proper ACM addons are installed too. 
-
-WARNING: The *policyController* addon is required so that the hub can manage the target cluster using policies. In the following sections of the lab an image-based upgrade process will be executed. It will require to modify the cluster using RHACM policies.
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/imagebaseinstall/09_ibi_klusterletaddonconfig.yaml
----
-apiVersion: agent.open-cluster-management.io/v1
-kind: KlusterletAddonConfig
-metadata:
-  name: sno3
-  namespace: sno3
-spec:
-  applicationManager:
-    enabled: false
-  certPolicyController:
-    enabled: false
-  clusterName: sno3
-  clusterNamespace: sno3
-  iamPolicyController:
-    enabled: false
-  policyController:
-    enabled: true
-  searchCollector:
-    enabled: false
-EOF
------
-
-Create the kustomization object that includes all the previous manifests:
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/imagebaseinstall/kustomization.yaml
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno3/kustomization.yaml
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - 01_ibi_ns.yaml
-  - 02_ibi_secret_registry.yaml
-  - 03_ibi_bmh.yaml
-  - 04_ibi_cluster_image_set.yaml
-  - 05_ibi_extra_manifests.yaml
-  - 06_ibi_image_cluster_install.yaml
-  - 07_ibi_cluster_deployment.yaml
-  - 08_ibi_managedcluster.yaml
-  - 09_ibi_klusterletaddonconfig.yaml
+  - bmc-credentials.yaml
+  - pull-secret.yaml
+  - ns.yaml
+  - ibi_extra_manifests.yaml
 EOF
 -----
-
-Apply the kustomization in the hub cluster:
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-oc --kubeconfig ~/hub-kubeconfig apply -k ~/imagebaseinstall/.
+cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/kustomization.yaml
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - sno3/
+EOF
 -----
-[.console]
+
+Eventually, let's create the ClusterInstance CR, which is an abstraction layer on top of the different components managed by the SiteConfig Operator used to deploy an OpenShift cluster. Notice that in this installation we are using the Image Based Installation flow. We can see that by checking the templateRefs specifications: `ibi-node-templates-v1` and `ibi-cluster-templates-v1` which are the default ones for IBI.
+
+IMPORTANT: The SiteConfig Operator transforms the ClusterInstance CR into multiple Installation Manifests as detailed in link:ztp-workflow.html#ibi-deployment[Image Based Installation] section. With some of those manifests that define site-specific resources, the IBI operator creates a configuration ISO to start the reconfiguration process.
+
+[.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-namespace/sno3 created
-configmap/disconnected-ran-config created
-secret/ibi-image-pull-secret created
-secret/sno3-bmh-secret created
-klusterletaddonconfig.agent.open-cluster-management.io/sno3 created
-managedcluster.cluster.open-cluster-management.io/sno3 created
-imageclusterinstall.extensions.hive.openshift.io/sno3 created
-clusterdeployment.hive.openshift.io/sno3 created
-clusterimageset.hive.openshift.io/openshift-{sno-cluster-version1}-disconnected configured
-baremetalhost.metal3.io/ocp-sno3 created
+cat << 'EOF' > ~/5g-deployment-lab/ztp-repository/site-configs/hub-1/ocp-sno3.yaml
+---
+apiVersion: siteconfig.open-cluster-management.io/v1alpha1
+kind: ClusterInstance
+metadata:
+  name: "ocp-sno3"
+  namespace: "sno3"
+spec:
+  additionalNTPSources:
+    - "clock.corp.redhat.com"
+  baseDomain: "5g-deployment.lab"
+  clusterImageSetNameRef: "active-ocp-version"
+  clusterName: "sno3"
+  clusterNetwork:
+    - cidr: "10.128.0.0/14"
+      hostPrefix: 23
+  cpuPartitioningMode: AllNodes
+  extraLabels:
+    ManagedCluster:
+      common: "ocp418"
+      logicalGroup: "active"
+      group-du-sno: ""
+      du-site: "sno3"
+      hardware-type: "hw-type-platform-1"
+  holdInstallation: false
+  extraManifestsRefs:
+    - name: disconnected-ran-config
+  machineNetwork:
+    - cidr: "192.168.125.0/24"
+  networkType: "OVNKubernetes"
+  pullSecretRef:
+    name: "disconnected-registry-pull-secret"
+  serviceNetwork:
+    - cidr: "172.30.0.0/16"
+  sshPublicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC5pFKFLOuxrd9Q/TRu9sRtwGg2PV+kl2MHzBIGUhCcR0LuBJk62XG9tQWPQYTQ3ZUBKb6pRTqPXg+cDu5FmcpTwAKzqgUb6ArnjECxLJzJvWieBJ7k45QzhlZPeiN2Omik5bo7uM/P1YIo5pTUdVk5wJjaMOb7Xkcmbjc7r22xY54cce2Wb7B1QDtLWJkq++eJHSX2GlEjfxSlEvQzTN7m2N5pmoZtaXpLKcbOqtuSQSVKC4XPgb57hgEs/ZZy/LbGGHZyLAW5Tqfk1JCTFGm6Q+oOd3wAOF1SdUxM7frdrN3UOB12u/E6YuAx3fDvoNZvcrCYEpjkfrsjU91oz78aETZV43hOK9NWCOhdX5djA7G35/EMn1ifanVoHG34GwNuzMdkb7KdYQUztvsXIC792E2XzWfginFZha6kORngokZ2DwrzFj3wgvmVyNXyEOqhwi6LmlsYdKxEvUtiYhdISvh2Y9GPrFcJ5DanXe7NVAKXe5CyERjBnxWktqAPBzXJa36FKIlkeVF5G+NWgufC6ZWkDCD98VZDiPP9sSgqZF8bSR4l4/vxxAW4knKIZv11VX77Sa1qZOR9Ml12t5pNGT7wDlSOiDqr5EWsEexga/2s/t9itvfzhcWKt+k66jd8tdws2dw6+8JYJeiBbU63HBjxCX+vCVZASrNBjiXhFw=="
+  templateRefs:
+    - name: ibi-cluster-templates-v1
+      namespace: open-cluster-management
+  nodes:
+    - automatedCleaningMode: "disabled"
+      bmcAddress: "redfish-virtualmedia://192.168.125.1:9000/redfish/v1/Systems/local/sno3"
+      bmcCredentialsName:
+        name: "sno3-bmc-credentials"
+      bootMACAddress: "AA:AA:AA:AA:04:01"
+      bootMode: "UEFI"
+      hostName: "ocp-sno3.sno3.5g-deployment.lab"
+      nodeNetwork:
+        interfaces:
+          - name: "enp3s0"
+            macAddress: "AA:AA:AA:AA:04:01"
+        config:
+          interfaces:
+            - name: enp3s0
+              type: ethernet
+              state: up
+              ipv4:
+                enabled: true
+                dhcp: true
+              ipv6:
+                enabled: false
+      role: "master"
+      rootDeviceHints:
+        deviceName: "/dev/vda"
+      templateRefs:
+        - name: ibi-node-templates-v1
+          namespace: open-cluster-management
+EOF
 -----
+
+Add the Kustomization file to pull the ClusterInstance recently created:
+
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+cat << 'EOF' > ~/5g-deployment-lab/ztp-repository/site-configs/kustomization.yaml
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - pre-reqs/
+  - resources/
+  - hub-1/ocp-sno3.yaml
+EOF
+-----
+
+Lastly, commit all these changes to our link:lab-environment-introduction.html#git-server[Git Server] repository.
+
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+cd ~/5g-deployment-lab/ztp-repository/site-configs/
+git add --all
+git commit -m 'Added SNO3 cluster using image-based install flow'
+git push origin main
+cd ~
+-----
+
+[#deploying-sno-using-gitops-pipeline]
+== Deploying the SNO Cluster using the ZTP GitOps Pipeline
+
+When we applied the ZTP GitOps Pipeline configuration in the last section, that created two ArgoCD apps. One of the apps (clusters) take care of deploying the clusters defined in the `ClusterInstance` while the other (policies) take care of deploying the policies defined in the different `PolicyGenTemplates`.
+
+Since the apps have been created, ArgoCD started doing its magic which means that the cluster deployment should already be running, let's see what happened in Argo CD.
+
+1. Login into https://openshift-gitops-server-openshift-gitops.apps.hub.5g-deployment.lab/[Argo CD].
+2. When accessing choose `Logging with OpenShift`, on the next screen use the OpenShift Console Admin credentials.
+3. You will see the follow applications:
++
+image::argocd-apps.png[ArgoCD Apps]
++
+4. From all these apps, the ones related to the ZTP GitOps Pipeline are `clusters` and `policies`. If we click on `clusters` we will see the following screen:
++
+image::argocd-clusters-app.png[ArgoCD Clusters App]
++
+5. You can see how the pipeline created all the required objects to get our site deployed.
+6. If we check the `policies` app this is what we will see:
++
+image::argocd-policies-app.png[ArgoCD Policies App]
 
 
 [#completing-install]
 == Completing the Installation
 
-Once the kustomization was applied, we can monitor the status of the reconfiguration process. We can use the following command to see the progress from the hub cluster. Notice that a `dataimage` object has been created. This object contains information about the configuration ISO created in the previous section link:installing-imagebaseinstall-cluster.html#creating-the-configuration-iso[Creating the Configuration ISO].
+Once the changes were commited and pushed to the Git repository, the link:ocp-gitops.html[OpenShift GitOps] operator is responsible for reconciling them. Next, we can monitor the status of the reconfiguration process. We can use the following command to see the progress from the hub cluster. Notice that a `dataimage` object has been created. This object contains information about the configuration ISO created in the previous section link:installing-imagebaseinstall-cluster.html#creating-the-configuration-iso[Creating the Configuration ISO].
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
@@ -614,6 +603,9 @@ oc --kubeconfig ~/hub-kubeconfig -n sno3 get bmh,clusterinstance,clusterdeployme
 -----
 NAMESPACE   NAME                               STATE                    CONSUMER   ONLINE   ERROR   AGE
 sno3        baremetalhost.metal3.io/ocp-sno3   externally provisioned              true             35s
+
+NAME                                                             PAUSED   PROVISIONSTATUS   PROVISIONDETAILS         AGE
+clusterinstance.siteconfig.open-cluster-management.io/ocp-sno3            Completed         Provisioning completed   9h
 
 NAMESPACE   NAME                                       INFRAID                                PLATFORM          REGION   VERSION       CLUSTERTYPE   PROVISIONSTATUS   POWERSTATE   AGE
 sno3        clusterdeployment.hive.openshift.io/sno3   sno3-zrts7                             none-platform                                          Provisioning                   35s
@@ -683,7 +675,7 @@ clusteroperator.config.openshift.io/service-ca                                 {
 
 The installation process takes less than *10 minutes*. You can double check that the reconfiguration succeeded by running the following command from the hub cluster.
 
-WARNING: Confirm that the `imageclusterinstall` status is ClusterInstallationSucceeded and the `clusterdeployment` is Provisioned.
+WARNING: Confirm that the `clusterInstance` is shown as "Provisioning completed", the `imageclusterinstall` status is ClusterInstallationSucceeded and the `clusterdeployment` is Provisioned.
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
@@ -695,6 +687,9 @@ oc --kubeconfig ~/hub-kubeconfig -n sno3 get bmh,clusterinstance,clusterdeployme
 -----
 NAME                               STATE                    CONSUMER   ONLINE   ERROR   AGE
 baremetalhost.metal3.io/ocp-sno3   externally provisioned              true             32m
+
+NAME                                                             PAUSED   PROVISIONSTATUS   PROVISIONDETAILS         AGE
+clusterinstance.siteconfig.open-cluster-management.io/ocp-sno3            Completed         Provisioning completed   32m
 
 NAME                                       INFRAID	PLATFORM        REGION   VERSION       CLUSTERTYPE   PROVISIONSTATUS   POWERSTATE   AGE
 clusterdeployment.hive.openshift.io/sno3   sno3-vcd52   none-platform            {sno-cluster-version1-cvo}                 Provisioned       Running      32m

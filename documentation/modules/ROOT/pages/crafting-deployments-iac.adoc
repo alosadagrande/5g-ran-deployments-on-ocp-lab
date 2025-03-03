@@ -1,4 +1,4 @@
-= Crafting the Deployment Infrastructure as Code
+= Preparing the ZTP GitOps Pipeline
 include::_attributes.adoc[]
 :profile: 5g-ran-lab
 
@@ -9,23 +9,20 @@ By describing our infrastructure as code (IaC) the Git repository holds declarat
 [#introduction-to-clusterinstance]
 == Introduction to the ClusterInstance
 
-The `ClusterInstance` is an abstraction layer on top of the different components managed by the link:ztp-at-scale.html#siteconfig[SiteConfig Operator] used to deploy an OpenShift cluster using either the {ai-workflow}[Agent Based Installation] or {ibi-docs}[Image Based Installation] flow. For the ones familiar with the {ai-workflow}[Agent Based Instalation] and particularly with the `Assisted Service`, you will know that in order to deploy a cluster using this service there are several Kubernetes objects that need to be created like: `ClusterDeployment`, `InfraEnv`, `AgentClusterInstall`, etc.
+The `ClusterInstance` is an abstraction layer on top of the different components managed by the link:ztp-at-scale.html#siteconfig[SiteConfig Operator], responsible for deploying OpenShift clusters using either the {ai-workflow}[Agent Based Installation] or {ibi-docs}[Image Based Installation] flow. For the ones familiar with the {ai-workflow}[Agent Based Installation] and particularly with the `Assisted Service`, you will know that in order to deploy a cluster using this service there are several Kubernetes objects that need to be created like: `ClusterDeployment`, `InfraEnv`, `AgentClusterInstall`, etc.
 
 The ClusterInstance simplifies this process by providing a unified structure to describe the cluster deployment configuration in a single place. In this {example-sno-clusterinstance-link}[link] you can find an example of a ClusterInstance for a SNO deployment. 
 
-In the next section, we will create our own ClusterInstance using the {ai-workflow}[Agent Based Installation] flow in order to deploy a SNO in our lab environment.
-
-[#crafting-our-own-clusterinstance]
-== Crafting our own ClusterInstance (agent-based install)
+In the comming sections, we will create our own ClusterInstances using the {ibi-docs}[Image Based Installation] and {ai-workflow}[Agent Based Installation] flows to deploy a couple of SNO clusters in our lab environment.
 
 WARNING: In the e-mail you received with the credentials to access the lab, do not forget to add the line included to your workstation’s /etc/hosts for accessing the lab environment.
 
 IMPORTANT: The steps below rely on the lab environment being up and running.
 
 [#git-repository]
-=== Git Repository
+== Git Repository
 
-We need a Git repository where we will store our clusters configurations, we will create a new Git repository in the Git server running on the infrastructure node.
+We need a Git repository where we will store our clusters configurations, we will create a new Git repository in the link:lab-environment-introduction.html#git-server[Git server] running on the infrastructure node.
 
 1. Login into the http://infra.5g-deployment.lab:3000/[Git server] (user: student, password: student).
 2. You will see that two Git repositories already exist, you **must not** change these repositories, instead you will create a new one.
@@ -36,7 +33,7 @@ image::gitea-repository.png[Gitea Repository]
 4. Use `ztp-repository` as `Repository Name` and click on `Create Repository`.
 5. You will get redirected to the new repository page.
 
-Now that we have a repository ready to be used we will clone it to our workstation.
+Now that we have a repository ready to be used we will clone it to the infrastructure host.
 
 IMPORTANT: Below commands must be executed from the workstation host if not specified otherwise.
 
@@ -49,7 +46,7 @@ git clone http://student:student@infra.5g-deployment.lab:3000/student/ztp-reposi
 
 We're ready to start working in the Git repository folder structure.
 
-As we saw in a previous section, the Git repository we will be using will have the following structure:
+As we saw in link:deployment-considerations.html#git-repo-structure[Git Repository Structure] section, the Git repository we will be using will have the following structure:
 
 [console-input]
 [source,console,subs="attributes+,+macros"]
@@ -61,6 +58,7 @@ As we saw in a previous section, the Git repository we will be using will have t
 |   |   |   └── {lab-major-version}
 │   ├── pre-reqs
 │   │   └── sno2
+|   |   └── sno3
 │   └── resources
 └── site-policies
     ├── fleet
@@ -77,401 +75,124 @@ Let's replicate it:
 
 WARNING: If it is the first time that you are using `git` in your machine, a message requiring you to setup a Git Username and Email may be shown.
 
-IMPORTANT: The cluster name for the SNO that we will be deploying in the lab will be **sno2**, that's why that folder exists in the repository structure that we are creating.
+IMPORTANT: The cluster name for the SNO that we will be deploying using the agent-based install will be **sno2**. On the other hand, **sno3** is the name of the cluster that we will deploy using the image-based install flow. That's why those folder exists in the repository structure that we are creating.
 
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
 cd ~/5g-deployment-lab/ztp-repository/
-mkdir -p site-configs/{hub-1,resources,pre-reqs/sno2,hub-1/extra-manifest,reference-manifest/{lab-major-version}}
+mkdir -p site-configs/{hub-1,resources,pre-reqs/sno2,pre-reqs/sno3,hub-1/extra-manifest,reference-manifest/{lab-major-version}}
 mkdir -p site-policies/{fleet/active/source-crs/reference-crs,fleet/active/source-crs/custom-crs,fleet/testing,sites/hub-1}
-touch site-configs/{hub-1,resources,pre-reqs/sno2,hub-1/extra-manifest,reference-manifest/{lab-major-version}}/.gitkeep
+touch site-configs/{hub-1,resources,pre-reqs/sno2,pre-reqs/sno3,hub-1/extra-manifest,reference-manifest/{lab-major-version}}/.gitkeep
 touch site-policies/{fleet/active/source-crs/reference-crs,fleet/active/source-crs/custom-crs,fleet/testing,sites/hub-1}/.gitkeep
 git add --all
 git commit -m 'Initialized repo structure'
 git push origin main
 -----
 
-[#baremetal-node-details]
-=== Bare Metal Node Details
+[#deploying-ztp-gitops-pipeline]
+== Deploying the ZTP GitOps Pipeline
 
-The details for our baremetal node that we want to provision as SNO2 are the ones below:
+As we saw in previous sections, clusters are deployed using the ZTP GitOps Pipeline, but before starting we need to load it into our hub cluster.
 
-* RedFish Endpoint: `redfish-virtualmedia://192.168.125.1:9000/redfish/v1/Systems/local/sno2`
-* MAC Address: `aa:aa:aa:aa:03:01`
-* Primary disk: `/dev/vda`
-* BMC User: `admin`
-* BMC Password: `admin`
-link:ztp-at-scale.html#siteconfig
-[#pre-reqs]
-=== Deployment Prerequisites
+We already have created the Git repository that will be used for storing our Infrastructure as Code (IaC) and Configuration as Code (CaC). Next step is deploying the ZTP GitOps Pipeline, let's do it.
 
-Before we start working on the ClusterInstance, let's add some information required for the deployment into the Git repository.
+IMPORTANT: Below commands must be executed from the infrastucture host if not specified otherwise.
 
-CAUTION: In a production environment you don't want to add sensitive information in plain text in your Git repository, for the sake of simplicity for this lab we are adding this information in plain text to the Git repo, so you don't have to care about it. This applies to things like pull secrets or BMC credentials.
+Before continuing, make sure you have the following tooling installed in your workstation:
 
-1. BMC credentials file.
-+
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno2/bmc-credentials.yaml
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: sno2-bmc-credentials
-  namespace: sno2
-data:
-  username: "YWRtaW4="
-  password: "YWRtaW4="
-type: Opaque
-EOF
------
-+
-2. Pull secret for accessing the disconnected registry.
-+
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno2/pull-secret.yaml
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: disconnected-registry-pull-secret
-  namespace: sno2
-stringData:
-  .dockerconfigjson: '{"auths":{"infra.5g-deployment.lab:8443":{"auth":"YWRtaW46cjNkaDR0MSE="}}}'
-  type: kubernetes.io/dockerconfigjson
-EOF
------
-+
-3. Namespace for the SNO2 cluster.
-+
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno2/ns.yaml
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: sno2
-EOF
------
+* {ocp-cli-docs}[oc client].
+* https://podman.io/getting-started/installation[podman].
 
-4. Kustomization file for the SNO2 pre-reqs.
-+
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/sno2/kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - bmc-credentials.yaml
-  - pull-secret.yaml
-  - ns.yaml
-EOF
------
-+
-5. Kustomization file for the clusters pre-reqs.
-+
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/pre-reqs/kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - sno2/
-EOF
------
-
-[#clusterinstance]
-=== ClusterInstance
-
-Now that we have the pre-reqs, let's jump into the ClusterInstance.
-
-Copy the command below and refer to the comments in the code for explanations.
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat << 'EOF' > ~/5g-deployment-lab/ztp-repository/site-configs/hub-1/ocp-sno2.yaml
----
-apiVersion: siteconfig.open-cluster-management.io/v1alpha1
-kind: ClusterInstance
-metadata:
-  name: "ocp-sno2"
-  namespace: "sno2"
-spec:
-  additionalNTPSources:
-    - "clock.corp.redhat.com"
-  baseDomain: "5g-deployment.lab"
-  clusterImageSetNameRef: "active-ocp-version"
-  clusterName: "sno2"
-  clusterNetwork:
-    - cidr: "10.128.0.0/14"
-      hostPrefix: 23
-  cpuPartitioningMode: AllNodes
-  extraLabels:
-    ManagedCluster:
-      common: "{policygen-common-label}"
-      logicalGroup: "active"
-      group-du-sno: ""
-      du-site: "sno2"
-      du-zone: "europe"
-      hardware-type: "hw-type-platform-1"
-  holdInstallation: false
-  extraManifestsRefs:
-    - name: {ran-rds-version-manifests}
-  installConfigOverrides: |
-    {
-      "capabilities": {
-        "baselineCapabilitySet": "None",
-        "additionalEnabledCapabilities": [
-          "NodeTuning",
-          "OperatorLifecycleManager",
-          "Ingress"
-        ]
-      }
-    }
-  machineNetwork:
-    - cidr: "192.168.125.0/24"
-  networkType: "OVNKubernetes"
-  pullSecretRef:
-    name: "disconnected-registry-pull-secret"
-  serviceNetwork:
-    - cidr: "172.30.0.0/16"
-  sshPublicKey: "{ssh-pub-key}"
-  templateRefs:
-    - name: ai-cluster-templates-v1
-      namespace: open-cluster-management
-  nodes:
-    - automatedCleaningMode: "disabled"
-      bmcAddress: "redfish-virtualmedia://192.168.125.1:9000/redfish/v1/Systems/local/sno2"
-      bmcCredentialsName:
-        name: "sno2-bmc-credentials"
-      bootMACAddress: "AA:AA:AA:AA:03:01"
-      bootMode: "UEFI"
-      hostName: "ocp-sno2.sno2.5g-deployment.lab"
-      ignitionConfigOverride: |
-        {
-          "ignition": {
-            "version": "3.2.0"
-          },
-          "storage": {
-            "disks": [
-              {
-                "device": "/dev/vda",
-                "partitions": [
-                  {
-                    "label": "var-lib-containers",
-                    "sizeMiB": 0,
-                    "startMiB": 60000
-                  }
-                ],
-                "wipeTable": false
-              }
-            ],
-            "filesystems": [
-              {
-                "device": "/dev/disk/by-partlabel/var-lib-containers",
-                "format": "xfs",
-                "mountOptions": [
-                  "defaults",
-                  "prjquota"
-                ],
-                "path": "/var/lib/containers",
-                "wipeFilesystem": true
-              }
-            ]
-          },
-          "systemd": {
-            "units": [
-              {
-                "contents": "# Generated by Butane\n[Unit]\nRequires=systemd-fsck@dev-disk-by\\x2dpartlabel-var\\x2dlib\\x2dcontainers.service\nAfter=systemd-fsck@dev-disk-by\\x2dpartlabel-var\\x2dlib\\x2dcontainers.service\n\n[Mount]\nWhere=/var/lib/containers\nWhat=/dev/disk/by-partlabel/var-lib-containers\nType=xfs\nOptions=defaults,prjquota\n\n[Install]\nRequiredBy=local-fs.target",
-                "enabled": true,
-                "name": "var-lib-containers.mount"
-              }
-            ]
-          }
-        }
-      nodeNetwork:
-        interfaces:
-          - name: "enp3s0"
-            macAddress: "AA:AA:AA:AA:03:01"
-        config:
-          interfaces:
-            - name: enp3s0
-              type: ethernet
-              state: up
-              ipv4:
-                enabled: true
-                dhcp: true
-              ipv6:
-                enabled: false
-      role: "master"
-      rootDeviceHints:
-        deviceName: "/dev/vda"
-      templateRefs:
-        - name: ai-node-templates-v1
-          namespace: open-cluster-management
-EOF
------
-IMPORTANT: Check that the above ClusterInstance CR is using the ai-node-templates-v1 (Agent Based Install) templates to deploy the sno2 OpenShift cluster. Also, we added an ignitionConfigOverride that creates a separate partition for the `/var/lib/containers` which is a pre-requisite for upgrading clusters using the image-based Upgrade method. We will deal with image-based upgrades later on in this lab, however, detailed information about the requirements needed can be found {ibu-var-lib-containers}[here]
-
-In our site, we defined `clusterImageSetNameRef: "active-ocp-version"` as for the release to use to deploy our site. This reference will point to the `active` release we are deploying our sites with. Let's create the `ClusterImageSet` in the repo:
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/resources/active-ocp-version.yaml
----
-apiVersion: hive.openshift.io/v1
-kind: ClusterImageSet
-metadata:
-  name: active-ocp-version
-spec:
-  releaseImage: {active-ocp-version-clusterimageset}
-EOF
------
-[#reference-manifest-siteconfig]
-=== Reference Manifest Configuration
-
-Let's add the {rds-config}[reference RAN DU configuration] for the version of OCP we are about to deploy. In the workstation, run the following command to extract the reference ZTP {lab-major-version} RAN configuration. Those manifests are extracted from the `/extra-manifest` folder of the ztp-site-generate container.
-
-[.console-input]
-[source,bash,subs="attributes+,+macros"]
------
-podman login infra.5g-deployment.lab:8443 -u admin -p r3dh4t1! --tls-verify=false
-podman run --log-driver=none --rm --tls-verify=false {ztp-sitegenerate-disconnected-image} extract /home/ztp/extra-manifest --tar | tar x -C ~/5g-deployment-lab/ztp-repository/site-configs/reference-manifest/{lab-major-version}/
------
-
-Notice that `reference-manifest/{lab-major-version}/` refers to the Git subdirectory that stores the contents of the RAN configuration for a specific version, in this case {lab-major-version}. Different versions of the RAN DU configuration can coexist by extracting them from the appropriate ztp-site-generate container version to a different extra-manifest folder. Then, the user just needs to include the right reference-manifest version folder to the cluster version is installing.
-
-This configuration is applied during installation time. 
+In the infrastructure server, run the following command to extract the pipeline installation files:
 
 WARNING: If you get `ERRO[0000] running `/usr/bin/newuidmap 51706 0 1000 1 1 100000 65536`: newuidmap: write to uid_map failed: Operation not permitted` when running podman commands, run them with sudo.
 
-Our recommendation is to always create a reference and keep the reference and user defined manifests (see next section) separately. This makes later updates to the reference based on z-stream releases significantly easier (simply replace the contents of reference-manifests with updated content)
-
-
-[#extra-manifest-siteconfig]
-=== Extra Manifest Configuration
-
-Now, let's add the **extra** or **custom** RAN configuration to the cluster. It is strongly recommended to include crun manifests as part of the additional install-time manifests for 4.13+. So let's create proper machine configuration in the extra manifest folder:
-
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/hub-1/extra-manifest/enable-crun-master.yaml
----
-apiVersion: machineconfiguration.openshift.io/v1
-kind: ContainerRuntimeConfig
-metadata:
- name: enable-crun-master
-spec:
- machineConfigPoolSelector:
-   matchLabels:
-     pools.operator.machineconfiguration.openshift.io/master: ""
- containerRuntimeConfig:
-   defaultRuntime: crun
-EOF
+mkdir -p ~/5g-deployment-lab/ztp-pipeline/argocd
+podman login infra.5g-deployment.lab:8443 -u admin -p r3dh4t1! --tls-verify=false
+podman run --log-driver=none --rm --tls-verify=false {ztp-sitegenerate-disconnected-image} extract /home/ztp/argocd --tar | tar x -C ~/5g-deployment-lab/ztp-pipeline/argocd/
 -----
 
+Now that we extracted the pipeline content we need to get it applied to our hub cluster:
+
+1. Login into the hub cluster.
++
+CAUTION: The command below must be changed to use the OpenShift admin password provided in the e-mail you received when the lab was ready.
++
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/hub-1/extra-manifest/enable-crun-worker.yaml
----
-apiVersion: machineconfiguration.openshift.io/v1
-kind: ContainerRuntimeConfig
-metadata:
- name: enable-crun-worker
-spec:
- machineConfigPoolSelector:
-   matchLabels:
-     pools.operator.machineconfiguration.openshift.io/worker: ""
- containerRuntimeConfig:
-   defaultRuntime: crun
-EOF
+oc --kubeconfig ~/hub-kubeconfig login -u admin -p <admin_password> https://api.hub.5g-deployment.lab:6443 --insecure-skip-tls-verify=true
 -----
-
-IMPORTANT: As of version 4.16 the default cgroups configuration is **cgroupsv2**. If there is a need to run cgroupsv1 instead, please add the https://github.com/openshift-kni/cnf-features-deploy/blob/release-4.15/ztp/source-crs/extra-manifest/enable-cgroups-v1.yaml[enable-cgroups-v1.yaml] extra-manifest to the same `extra-manifest` folder where crun is configured.
-
-
-[#preparing-installation]
-=== Preparing for the Installation
-
-Finally, we will add the kustomizations for the ClusterInstance. Note that the link:crafting-deployments-iac.html#reference-manifest-siteconfig[Refence RAN DU] and the link:crafting-deployments-iac.html#extra-manifest-siteconfig[extra-manifests] configuration are included as a `configmap` custom resource named *{ran-rds-version-manifests}*.
++
+2. Modify the ZTP GitOps Pipeline configuration to match our environment configuration.
+.. Change the repository url for the two ArgoApps:
++
+NOTE: If you're using MacOS and you're getting errors while running `sed -i` commands, make sure you are using `gsed`. If you do not have it available, please install it: `brew install gnu-sed`.
++
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/hub-1/kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-generators:
-  - ocp-sno2.yaml
-EOF
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/resources/kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - active-ocp-version.yaml
-EOF
-cat <<EOF > ~/5g-deployment-lab/ztp-repository/site-configs/kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - pre-reqs/
-  - resources/
-  - hub-1/ocp-sno2.yaml
-
-configMapGenerator:
-  - files:
-    - reference-manifest/4.18/01-container-mount-ns-and-kubelet-conf-master.yaml
-    - reference-manifest/4.18/01-container-mount-ns-and-kubelet-conf-worker.yaml
-    - reference-manifest/4.18/01-disk-encryption-pcr-rebind-master.yaml
-    - reference-manifest/4.18/01-disk-encryption-pcr-rebind-worker.yaml
-    - reference-manifest/4.18/03-sctp-machine-config-master.yaml
-    - reference-manifest/4.18/03-sctp-machine-config-worker.yaml
-    - reference-manifest/4.18/06-kdump-master.yaml
-    - reference-manifest/4.18/06-kdump-worker.yaml
-    - reference-manifest/4.18/07-sriov-related-kernel-args-master.yaml
-    - reference-manifest/4.18/07-sriov-related-kernel-args-worker.yaml
-    - reference-manifest/4.18/08-set-rcu-normal-master.yaml
-    - reference-manifest/4.18/08-set-rcu-normal-worker.yaml
-    - reference-manifest/4.18/09-openshift-marketplace-ns.yaml
-    - reference-manifest/4.18/99-crio-disable-wipe-worker.yaml
-    - reference-manifest/4.18/99-sync-time-once-master.yaml
-    - reference-manifest/4.18/99-crio-disable-wipe-master.yaml
-    - reference-manifest/4.18/99-sync-time-once-worker.yaml
-    - hub-1/extra-manifest/enable-crun-master.yaml
-    - hub-1/extra-manifest/enable-crun-worker.yaml
-    name: {ran-rds-version-manifests}
-    namespace: sno2
-
-generatorOptions:
-  disableNameSuffixHash: true
-EOF
+sed -i "s|repoURL: .*|repoURL: http://infra.5g-deployment.lab:3000/student/ztp-repository.git|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/clusters-app.yaml
+sed -i "s|repoURL: .*|repoURL: http://infra.5g-deployment.lab:3000/student/ztp-repository.git|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/policies-app.yaml
 -----
-
-At this point we can push the changes to the repo and continue to the next section.
-
++
+.. Change the repository path for the two ArgoApps:
++
 [.console-input]
 [source,bash,subs="attributes+,+macros"]
 -----
-cd ~/5g-deployment-lab/ztp-repository
-git add --all
-git commit -m 'Added SNO2 cluster using agent-based install flow'
-git push origin main
-cd ~
+sed -i "s|path: .*|path: site-configs|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/clusters-app.yaml
+sed -i "s|path: .*|path: site-policies|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/policies-app.yaml
 -----
++
+.. Change the repository branch for the two ArgoApps:
++
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+sed -i "s|targetRevision: .*|targetRevision: main|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/clusters-app.yaml
+sed -i "s|targetRevision: .*|targetRevision: main|" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/policies-app.yaml
+-----
++
+3. Allow `ClusterImageSet` resource to the list of allowed resources:
++
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+sed -i "/clusterResourceWhitelist:/a \ \ - group: \'hive.openshift.io\'\n \ \ \ kind: ClusterImageSet" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/app-project.yaml
+-----
++
+4. Include `openshift-adp` namespace in the list of namespaces managed by the GitOps operator.
++
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+sed -i "/destinations:/a \ \ - namespace: \'openshift-adp\'\n \ \ \ server: '\*\'" ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/policies-app-project.yaml
+-----
++
+5. Apply the ZTP GitOps Pipeline configuration:
++
+[.console-input]
+[source,bash,subs="attributes+,+macros"]
+-----
+oc --kubeconfig ~/5g-deployment-lab/hub-kubeconfig apply -k ~/5g-deployment-lab/ztp-pipeline/argocd/deployment/
+-----
+
+At this stage, we have our ZTP GitOps pipeline running and waiting for commiting declarative Infrastructure and Configuration as Code to the `ztp-repository` Git repository. In the next image, a couple of new ArgoCD apps running:
+
+* **clusters**. It is responsible for managing the deployment of Single Node OpenShift clusters from the Git repository.
+* **policies**. It is responsible for managing the configuration via RHACM policies that will be applied to Single Node OpenShift clusters. Basically, it configures the {rds-config}[Telco RAN DU reference configuration]. 
+
+
+image::ztp-pipeline-01.png[ZTP pipeline]
+
+IMPORTANT: Notice that there is nothing to deploy in any of the previous ArgoCD applications. This is because we did not yet commit any configuration to the ztp-repository Git repo. This is going to change in the next section.
+
+image::ztp-pipeline-clusters.png[ZTP clusters app]
+
+
+image::ztp-pipeline-policies.png[ZTP policies app]

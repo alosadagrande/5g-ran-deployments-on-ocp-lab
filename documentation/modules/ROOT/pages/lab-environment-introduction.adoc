@@ -43,7 +43,7 @@ Credentials for the OCP cluster:
 
 An HTTP server is deployed on the infrastructure host to publish the Red Hat CoreOS ISO and Red Hat CoreOS Rootfs images locally. These images are required to deploy the already existing infrastructure and the OpenShift Clusters that will be deployed in our lab.
 
-IMPORTANT: The HTTP server cannot be reached from outside the infrastructure node
+IMPORTANT: The HTTP server cannot be contacted from outside the infrastructure node. It can be reached it at http://infra.5g-deployment.lab:8080 from the infrastucture host.
 
 [#s3-storage]
 == S3 Storage Server
